@@ -53,7 +53,7 @@ world=list(
 	collostructionImpact=1/5,	#if candidateOrdering=='all', how should (rescaled) collostruction frequency be weighed with respect to match? Also used by VERBMORPHOLOGY
 	semanticWeightImpact=1/10,	#if candidateOrdering=='all', how should semantic weight be weighed with respect to match (given Grice: do not say more than necessary)
 	economyImpact=1/10,	#if candidateOrdering=='all', how should economy be weighed with respect to match (given Grice: do not say more than necessary)
-	recencyDamper=10,	#decreases activation of most recent items (a la Mandelbrot) [RESCALE(jitter(log((frequency+1)/(recency+1+recencyImpact)), factor=activationNoise))]
+	recencyDamper=5,	#decreases activation of most recent items (a la Mandelbrot) [RESCALE(jitter(log((frequency+1)/(recency+1+recencyImpact)), factor=activationNoise))]
 	activationNoise=2,	#noise factor that is added to activation values of items [RESCALE(jitter(log((frequency+1)/(recency+1+recencyImpact)), factor=activationNoise))]
 	functionBlocking=T, 	#should frequent usage for some function (argument, role marker, index marker) inhibit other functions? (only applies if frequency=relative). And: should reference to certain person values block others?
 	wordOrder=T,	#should agents try to use word-order generalizations to mark/determine roles?
@@ -789,6 +789,108 @@ FIRSTINFIRSTOUT=function(speakerID, proposition){
 proposition
 }
 
+AGENTFIRST=function(proposition){
+	if(proposition$verb$type=='onePlace'){	#desirable like this for intransitives? Maybe dependent on semantic role 
+		proposition=proposition[c('external',names(proposition)[names(proposition)!='external'])]
+	}
+	if(proposition$verb$type=='twoPlace'){
+		actor=ifelse(ACTOR(proposition$verb[,grep('^Ext\\d', names(proposition$verb))], proposition$verb[,grep('^Int\\d', names(proposition$verb))])==1, 'external', 'internal')
+		proposition=proposition[c(actor,names(proposition)[names(proposition)!=actor])]
+	}
+proposition
+}
+
+VERBFINAL=function(proposition){
+	target=proposition[[length(proposition)]]
+	proposition=proposition[-length(proposition)]
+	proposition=proposition[c(names(proposition)[names(proposition)!='verb'], 'verb')]
+	proposition$target=target
+proposition
+}
+
+TOPICFIRST=function(speakerID, proposition){
+	topicCopy=world$topicCopy
+	target=proposition$target
+	if(proposition$verb$type=='onePlace'){
+		if(proposition$verb$topic==1){proposition=proposition[c('verb','external', 'target')]}
+		if(proposition$external$topic==1){proposition=proposition[c('external','verb', 'target')]}
+	}
+	if(proposition$verb$type=='twoPlace'){
+		if(proposition$verb$topic==1){proposition=proposition[c('verb',names(proposition)[names(proposition)!='verb'])]}
+		if(proposition$external$topic==1){proposition=proposition[c('external',names(proposition)[names(proposition)!='external'])]}
+		if(proposition$internal$topic==1){proposition=proposition[c('internal',names(proposition)[names(proposition)!='internal'])]}
+	}
+	proposition$target=target
+	if(topicCopy==T & proposition$verb$topic!=1){proposition=TOPICCOPY(speakerID, proposition)}
+proposition
+}
+
+TOPICCOPY=function(speakerID, proposition){
+	distinctiveness=world$distinctiveness; frequency=world$frequency
+	speaker=population[[speakerID]]
+	markerID=0
+	if(proposition$verb$type=='onePlace' & proposition$external$recency!=0){	#only copy for reestablished/non-continuous topics (cf. Givon; idem for twoPlace below)
+		markers=speaker$nouns[speaker$nouns$person==proposition$external$person,]	
+		markers=markers[sample(nrow(markers)),]
+		markers$match=VMATCH(proposition$external[,grep('^D\\d',names(proposition$external))], markers[,grep('^D\\d',names(markers))])
+		if(!'extMarkerID'%in%names(proposition$verb)){
+			markers=markers[order(CANDIDATESCORE(markers, type='verbMarker'), decreasing=T),]
+			for (i in 1:nrow(markers)){
+				if(markers[i,]$match > (1-distinctiveness)){
+					markerID=markers[i,]$ID
+					break()
+			}	}
+			if(markerID==0){markerID=markers[MAX(markers$match, forceChoice=T),]$ID}
+			markerTarget=proposition$external$ID
+	}	}
+	if(proposition$verb$type=='twoPlace'){
+		if(proposition$external$topic==1 & proposition$external$recency!=0 & !'extMarkerID'%in%names(proposition$verb)){
+			markerTarget=proposition$external$ID
+			markers=speaker$nouns[speaker$nouns$person==proposition$external$person,]	
+			markers=markers[sample(nrow(markers)),]
+			markers$match=VMATCH(proposition$external[,grep('^D\\d',names(proposition$external))], markers[,grep('^D\\d',names(markers))])
+			markers$distractorMatch=0
+			markers[markers$person==proposition$external$person, ]$distractorMatch=VMATCH(proposition$internal[,grep('^D\\d',names(proposition$internal))], markers[markers$person==proposition$external$person,grep('^D\\d',names(markers))])
+			markers=markers[order(CANDIDATESCORE(markers, type='verbMarker'), decreasing=T),]
+			for (i in 1:nrow(markers)){
+				if(markers[i,]$match > (markers[i,]$distractorMatch + distinctiveness)){
+					markerID=markers[i,]$ID
+					break()
+				}
+				if(markerID==0){markerID=markers[MAX(markers$match, forceChoice=T),]$ID}
+		}	}
+		if(proposition$internal$topic==1 & proposition$internal$recency!=0 &!'intMarkerID'%in%names(proposition$verb)){
+			markerTarget=proposition$internal$ID
+			markers=speaker$nouns[speaker$nouns$person==proposition$internal$person,]	
+			markers=markers[sample(nrow(markers)),]
+			markers$match=VMATCH(proposition$internal[,grep('^D\\d',names(proposition$internal))], markers[,grep('^D\\d',names(markers))])
+			markers$distractorMatch=0
+			markers[markers$person==proposition$internal$person, ]$distractorMatch=VMATCH(proposition$external[,grep('^D\\d',names(proposition$external))], markers[markers$person==proposition$internal$person,grep('^D\\d',names(markers))])
+			markers=markers[order(CANDIDATESCORE(markers, type='verbMarker'), decreasing=T),]
+			for (i in 1:nrow(markers)){
+				if(markers[i,]$match > (markers[i,]$distractorMatch + distinctiveness)){
+					markerID=markers[i,]$ID
+					break()
+				}
+				if(markerID==0){markerID=markers[MAX(markers$match, forceChoice=T),]$ID}
+		}	}
+		if(proposition$internal$topic==1 & markerID!=0){
+			proposition$verb$intMarkerID=markerID
+			proposition$verb$intMarker=speaker$nouns[speaker$nouns$ID==markerID,]$form
+			proposition$verb$intMarkerTarget=markerTarget
+			if(frequency=='absolute'){proposition$verb$intMarkerFrequency=speaker$nouns[speaker$nouns$ID==markerID,]$frequency}
+			if(frequency=='relative'){proposition$verb$intMarkerFrequency=speaker$nouns[speaker$nouns$ID==markerID,]$verbMarker}
+	}	}		
+	if(proposition$external$topic==1  & markerID!=0){
+		proposition$verb$extMarkerID=markerID
+		proposition$verb$extMarker=speaker$nouns[speaker$nouns$ID==markerID,]$form
+		proposition$verb$extMarkerTarget=markerTarget	
+		if(frequency=='absolute'){proposition$verb$extMarkerFrequency=speaker$nouns[speaker$nouns$ID==markerID,]$frequency}
+		if(frequency=='relative'){proposition$verb$extMarkerFrequency=speaker$nouns[speaker$nouns$ID==markerID,]$verbMarker}
+	}	
+proposition
+}
+
 GENERALIZE=function(speakerID, proposition, situation){
 	distinctiveness=world$distinctiveness; frequency=world$frequency; suffixThreshold=world$suffixThreshold; distinctions=world$distinctions; topicCopy=world$topicCopy; wordOrder=world$wordOrder
 	speaker=population[[speakerID]]
@@ -805,6 +907,8 @@ GENERALIZE=function(speakerID, proposition, situation){
 			c((sum(speaker$wordOrder$success)-speaker$wordOrder$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))) |
 			#A first
 			c(sum(speaker$wordOrder[grep('^A', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))) |
+			#V final
+			c(sum(speaker$wordOrder[grep('V$', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))) |
 			#UV
 			c(sum(speaker$wordOrder[grep('UV', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))) |
 			#VU
@@ -813,7 +917,11 @@ GENERALIZE=function(speakerID, proposition, situation){
 			##first general generalizations
 			#A first
 			if(TRUE %in% c(sum(speaker$wordOrder[grep('^A', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success))))){
-				proposition=AGENTFIRSTPROD(proposition)
+				proposition=AGENTFIRST(proposition)
+			}
+			#V final
+			if(TRUE %in% c(sum(speaker$wordOrder[grep('V$', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success))))){
+				proposition=VERBFINAL(proposition)
 			}
 			if(proposition$verb$type=='twoPlace'){
 				actor=ifelse(ACTOR(proposition$verb[,grep('^Ext\\d', names(proposition$verb))], proposition$verb[,grep('^Int\\d', names(proposition$verb))])==1, 'external', 'internal')
@@ -1055,102 +1163,6 @@ GENERALIZE=function(speakerID, proposition, situation){
 proposition	
 }
 
-AGENTFIRSTPROD=function(proposition){
-	target=proposition$target
-	if(proposition$verb$type=='onePlace'){	#desirable like this for intransitives? Maybe dependent on semantic role 
-		proposition=proposition[c('external',names(proposition)[names(proposition)!='external'])]
-	}
-	if(proposition$verb$type=='twoPlace'){
-		actor=ifelse(ACTOR(proposition$verb[,grep('^Ext\\d', names(proposition$verb))], proposition$verb[,grep('^Int\\d', names(proposition$verb))])==1, 'external', 'internal')
-		proposition=proposition[c(actor,names(proposition)[names(proposition)!=actor])]
-	}
-	proposition$target=target
-proposition
-}
-
-TOPICFIRST=function(speakerID, proposition){
-	topicCopy=world$topicCopy
-	target=proposition$target
-	if(proposition$verb$type=='onePlace'){
-		if(proposition$verb$topic==1){proposition=proposition[c('verb','external', 'target')]}
-		if(proposition$external$topic==1){proposition=proposition[c('external','verb', 'target')]}
-	}
-	if(proposition$verb$type=='twoPlace'){
-		if(proposition$verb$topic==1){proposition=proposition[c('verb',names(proposition)[names(proposition)!='verb'])]}
-		if(proposition$external$topic==1){proposition=proposition[c('external',names(proposition)[names(proposition)!='external'])]}
-		if(proposition$internal$topic==1){proposition=proposition[c('internal',names(proposition)[names(proposition)!='internal'])]}
-	}
-	proposition$target=target
-	if(topicCopy==T & proposition$verb$topic!=1){proposition=TOPICCOPY(speakerID, proposition)}
-proposition
-}
-
-TOPICCOPY=function(speakerID, proposition){
-	distinctiveness=world$distinctiveness; frequency=world$frequency
-	speaker=population[[speakerID]]
-	markerID=0
-	if(proposition$verb$type=='onePlace' & proposition$external$recency!=0){	#only copy for reestablished/non-continuous topics (cf. Givon; idem for twoPlace below)
-		markers=speaker$nouns[speaker$nouns$person==proposition$external$person,]	
-		markers=markers[sample(nrow(markers)),]
-		markers$match=VMATCH(proposition$external[,grep('^D\\d',names(proposition$external))], markers[,grep('^D\\d',names(markers))])
-		if(!'extMarkerID'%in%names(proposition$verb)){
-			markers=markers[order(CANDIDATESCORE(markers, type='verbMarker'), decreasing=T),]
-			for (i in 1:nrow(markers)){
-				if(markers[i,]$match > (1-distinctiveness)){
-					markerID=markers[i,]$ID
-					break()
-			}	}
-			if(markerID==0){markerID=markers[MAX(markers$match, forceChoice=T),]$ID}
-			markerTarget=proposition$external$ID
-	}	}
-	if(proposition$verb$type=='twoPlace'){
-		if(proposition$external$topic==1 & proposition$external$recency!=0 & !'extMarkerID'%in%names(proposition$verb)){
-			markerTarget=proposition$external$ID
-			markers=speaker$nouns[speaker$nouns$person==proposition$external$person,]	
-			markers=markers[sample(nrow(markers)),]
-			markers$match=VMATCH(proposition$external[,grep('^D\\d',names(proposition$external))], markers[,grep('^D\\d',names(markers))])
-			markers$distractorMatch=0
-			markers[markers$person==proposition$external$person, ]$distractorMatch=VMATCH(proposition$internal[,grep('^D\\d',names(proposition$internal))], markers[markers$person==proposition$external$person,grep('^D\\d',names(markers))])
-			markers=markers[order(CANDIDATESCORE(markers, type='verbMarker'), decreasing=T),]
-			for (i in 1:nrow(markers)){
-				if(markers[i,]$match > (markers[i,]$distractorMatch + distinctiveness)){
-					markerID=markers[i,]$ID
-					break()
-				}
-				if(markerID==0){markerID=markers[MAX(markers$match, forceChoice=T),]$ID}
-		}	}
-		if(proposition$internal$topic==1 & proposition$internal$recency!=0 &!'intMarkerID'%in%names(proposition$verb)){
-			markerTarget=proposition$internal$ID
-			markers=speaker$nouns[speaker$nouns$person==proposition$internal$person,]	
-			markers=markers[sample(nrow(markers)),]
-			markers$match=VMATCH(proposition$internal[,grep('^D\\d',names(proposition$internal))], markers[,grep('^D\\d',names(markers))])
-			markers$distractorMatch=0
-			markers[markers$person==proposition$internal$person, ]$distractorMatch=VMATCH(proposition$external[,grep('^D\\d',names(proposition$external))], markers[markers$person==proposition$internal$person,grep('^D\\d',names(markers))])
-			markers=markers[order(CANDIDATESCORE(markers, type='verbMarker'), decreasing=T),]
-			for (i in 1:nrow(markers)){
-				if(markers[i,]$match > (markers[i,]$distractorMatch + distinctiveness)){
-					markerID=markers[i,]$ID
-					break()
-				}
-				if(markerID==0){markerID=markers[MAX(markers$match, forceChoice=T),]$ID}
-		}	}
-		if(proposition$internal$topic==1 & markerID!=0){
-			proposition$verb$intMarkerID=markerID
-			proposition$verb$intMarker=speaker$nouns[speaker$nouns$ID==markerID,]$form
-			proposition$verb$intMarkerTarget=markerTarget
-			if(frequency=='absolute'){proposition$verb$intMarkerFrequency=speaker$nouns[speaker$nouns$ID==markerID,]$frequency}
-			if(frequency=='relative'){proposition$verb$intMarkerFrequency=speaker$nouns[speaker$nouns$ID==markerID,]$verbMarker}
-	}	}		
-	if(proposition$external$topic==1  & markerID!=0){
-		proposition$verb$extMarkerID=markerID
-		proposition$verb$extMarker=speaker$nouns[speaker$nouns$ID==markerID,]$form
-		proposition$verb$extMarkerTarget=markerTarget	
-		if(frequency=='absolute'){proposition$verb$extMarkerFrequency=speaker$nouns[speaker$nouns$ID==markerID,]$frequency}
-		if(frequency=='relative'){proposition$verb$extMarkerFrequency=speaker$nouns[speaker$nouns$ID==markerID,]$verbMarker}
-	}	
-proposition
-}
-
 CHECKSUCCESS=function(speakerID, proposition, situation){
 	solutionMethod=world$solutionMethod; distinctiveness=world$distinctiveness; topicCopy=world$topicCopy; frequency=world$frequency; referenceThreshold=world$referenceThreshold; generalization=world$generalization; wordOrder=world$wordOrder
 	speaker=population[[speakerID]]
@@ -1233,6 +1245,8 @@ CHECKSUCCESS=function(speakerID, proposition, situation){
 				c((sum(speaker$wordOrder$success)-speaker$wordOrder$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))) |
 				#A first
 				c(sum(speaker$wordOrder[grep('^A', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))) |
+				#V final
+				c(sum(speaker$wordOrder[grep('V$', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))) |
 				#UV
 				c(sum(speaker$wordOrder[grep('UV', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))) |
 				#VU
@@ -1241,6 +1255,7 @@ CHECKSUCCESS=function(speakerID, proposition, situation){
 					standard=speaker$wordOrder$order[(sum(speaker$wordOrder$success)-speaker$wordOrder$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))]
 					if(length(standard)==0){
 						if(sum(speaker$wordOrder[grep('^A', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))){standard='^A'}
+						if(sum(speaker$wordOrder[grep('V$', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))){standard='V$'}
 						if(sum(speaker$wordOrder[grep('UV', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))){standard='UV'}
 						if(sum(speaker$wordOrder[grep('VU', speaker$wordOrder$order, invert=T), ]$success) < (sum(speaker$wordOrder$success)/log(sum(speaker$wordOrder$success)))){standard='VU'}
 					}
@@ -1738,18 +1753,6 @@ PROTOINTERPRETATION=function(hearerID, analysis){
 analysis
 }
 
-AGENTFIRSTINT=function(hearerID, analysis){
-	hearer=population[[hearerID]]
-	if(length(grep('\\?', analysis$role))>1){
-		verb=analysis[analysis$role=='verb',]
-		if(verb$verbType=='twoPlace'){
-			verbSemantics=hearer$verbs[hearer$verbs$ID==verb$verbID,]
-			actor=ifelse(ACTOR(verbSemantics[,grep('^Ext\\d',names(verbSemantics))], verbSemantics[,grep('^Int\\d',names(verbSemantics))])==1,'external','internal')
-			if(!actor%in%analysis$role){analysis[grep('\\?', analysis$role)[1],]$role=actor}
-	}	}
-analysis
-}
-
 NOUNMORPHOLOGY=function(hearerID, analysis){
 	distinctiveness=world$distinctiveness
 	hearer=population[[hearerID]]
@@ -1825,6 +1828,8 @@ WORDORDER=function(hearerID, analysis){
 			c((sum(hearer$wordOrder$success)-hearer$wordOrder$success) < (sum(hearer$wordOrder$success)/log(sum(hearer$wordOrder$success)))) |
 			#A first
 			c(sum(hearer$wordOrder[grep('^A', hearer$wordOrder$order, invert=T), ]$success) < (sum(hearer$wordOrder$success)/log(sum(hearer$wordOrder$success)))) |
+			#V final
+			c(sum(hearer$wordOrder[grep('V$', hearer$wordOrder$order, invert=T), ]$success) < (sum(hearer$wordOrder$success)/log(sum(hearer$wordOrder$success)))) |
 			#UV
 			c(sum(hearer$wordOrder[grep('UV', hearer$wordOrder$order, invert=T), ]$success) < (sum(hearer$wordOrder$success)/log(sum(hearer$wordOrder$success)))) |
 			#VU
@@ -2996,15 +3001,16 @@ RUN=function(nHours=1){
 		stop=proc.time()[3]
 }	}
 
-MULTIRUN=function(nHours=24, nLineages=3, name='lineage', nAgents=2, close=T, ...){
+MULTIRUN=function(nHours=48, nLineages=3, name='lineage', nAgents=2, nSaves=4, close=T, ...){
 	parameters=list(...)
 	if(!'data'%in%dir()){dir.create('data')}
 	if(length(parameters)!=0){for(i in 1:length(parameters)){world[[names(parameters)[i]]]<<-parameters[[i]]}}
 	for(j in 1:nLineages){
 		FOUND(nAgents)
-		RUN(nHours)
-		save.image(paste('data/', name, '-', j, '.rdata', sep=''))
-	}
+		for(i in 1:nSaves){
+			RUN(nHours/nSaves)
+			save.image(paste('data/', name, '-', j, '.rdata', sep=''))
+	}	}
 	if(close==T){q('no')}
 }
 
@@ -3026,6 +3032,7 @@ SUMMARY=function(){
 			if(TRUE%in%
 				c((sum(graveyard$brains[[i]]$wordOrder$success)-graveyard$brains[[i]]$wordOrder$success) < (sum(graveyard$brains[[i]]$wordOrder$success)/log(sum(graveyard$brains[[i]]$wordOrder$success)))) |
 				c(sum(graveyard$brains[[i]]$wordOrder[grep('^A', graveyard$brains[[i]]$wordOrder$order, invert=T), ]$success) < (sum(graveyard$brains[[i]]$wordOrder$success)/log(sum(graveyard$brains[[i]]$wordOrder$success)))) |
+				c(sum(graveyard$brains[[i]]$wordOrder[grep('V$', graveyard$brains[[i]]$wordOrder$order, invert=T), ]$success) < (sum(graveyard$brains[[i]]$wordOrder$success)/log(sum(graveyard$brains[[i]]$wordOrder$success)))) |
 				c(sum(graveyard$brains[[i]]$wordOrder[grep('UV', graveyard$brains[[i]]$wordOrder$order, invert=T), ]$success) < (sum(graveyard$brains[[i]]$wordOrder$success)/log(sum(graveyard$brains[[i]]$wordOrder$success)))) |
 				c(sum(graveyard$brains[[i]]$wordOrder[grep('VU', graveyard$brains[[i]]$wordOrder$order, invert=T), ]$success) < (sum(graveyard$brains[[i]]$wordOrder$success)/log(sum(graveyard$brains[[i]]$wordOrder$success)))) 
 			){generation=c(generation, graveyard$brains[[i]]$generation)}
@@ -3065,7 +3072,7 @@ SUMMARY=function(){
 	#generalizations
 	summary$order=list(order=1:agent$generation, yang=data.frame())
 		summary$order$order[!summary$order$order%in%order]=0
-		yang=data.frame(order=c('A first', 'UV', 'VU'), generation=0, stringsAsFactors=F)
+		yang=data.frame(order=c('A first', 'V final', 'UV', 'VU'), generation=0, stringsAsFactors=F)
 		for (i in seq(2, length(graveyard$brains), 2)){
 			generation=graveyard$brains[[i]]$generation
 			order=graveyard$brains[[i]]$wordOrder
@@ -3076,6 +3083,9 @@ SUMMARY=function(){
 			}
 			if(sum(graveyard$brains[[i]]$wordOrder[grep('^A', graveyard$brains[[i]]$wordOrder$order, invert=T), ]$success) < (sum(graveyard$brains[[i]]$wordOrder$success)/log(sum(graveyard$brains[[i]]$wordOrder$success)))){
 				yang[yang$order=='A first', ]$generation=paste(yang[yang$order=='A first', ]$generation, generation)
+			}
+			if(sum(graveyard$brains[[i]]$wordOrder[grep('V$', graveyard$brains[[i]]$wordOrder$order, invert=T), ]$success) < (sum(graveyard$brains[[i]]$wordOrder$success)/log(sum(graveyard$brains[[i]]$wordOrder$success)))){
+				yang[yang$order=='V final', ]$generation=paste(yang[yang$order=='V final', ]$generation, generation)
 			}
 			if(sum(graveyard$brains[[i]]$wordOrder[grep('UV', graveyard$brains[[i]]$wordOrder$order, invert=T), ]$success) < (sum(graveyard$brains[[i]]$wordOrder$success)/log(sum(graveyard$brains[[i]]$wordOrder$success)))){
 				yang[yang$order=='UV', ]$generation=paste(yang[yang$order=='UV', ]$generation, generation)
