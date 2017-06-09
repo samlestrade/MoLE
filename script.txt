@@ -1,0 +1,258 @@
+##########
+## data ##
+##########
+
+#load preprocessed WordNet
+load('PATH/wordnet.rdata')
+#load preprocessed Brown
+load('PATH/brown.rdata')
+#HNC
+hnc=read.csv2('PATH/magy.csv', T)
+#load CGN
+load('PATH/cgn.rdata')
+
+
+###############
+## functions ##
+###############
+
+ZIPF=function(n=10^6, classSize=c(5, 30, 50, 100, 500, 500, 1000, 15000, 25000, 100000), classFrequency=1, meaning=T, nDims=30, openClassThreshold=1, nDistractors=5, output=T){
+	classSize=sort(classSize)
+	#develop lexicon
+	if(meaning==F){
+		lexicon=data.frame(ID=0, POS=rep(1:length(classSize), classSize), prob=1, freq=0, stringsAsFactors=F)
+		for(i in 1:length(classSize)){lexicon$ID[lexicon$POS==i]=paste(i, 1:classSize[i], sep='-')}
+	}
+	if(meaning==T){
+		lexicon=data.frame(ID=0, POS=rep(1:length(classSize), classSize), spec=0, prob=0, freq=0, pApplicable=NA, pNoDistractors=1, stringsAsFactors=F)
+		for(i in 1:length(classSize)){
+			lexicon$ID[lexicon$POS==i]=paste(i, 1:classSize[i], sep='-')
+		}
+		lexicon$spec=replicate(nrow(lexicon), sum(sample(c(0:1), nDims, replace=T, prob=c(2,1))))
+		#prob that item is applicable to any given object is .5 to the number of dimensions it is specified for (given binary dimensions).
+		lexicon$pApplicable=.5^lexicon$spec	
+		for(i in 1:length(unique(lexicon$POS))){
+			#prob that there is no distractor to which an item from an open class could apply (closed class items have no distractors)
+			if(classSize[i]>=openClassThreshold){lexicon[lexicon$POS==i,]$pNoDistractors=(1-lexicon[lexicon$POS==i,]$pApplicable)^nDistractors}	
+		}
+		lexicon$prob=lexicon$pApplicable*lexicon$pNoDistractors
+	}
+	#develop corpus
+	if(length(classFrequency)==1){classFrequency=rep(classFrequency, length(classSize))}
+	corpus=vector()
+	for (i in 1:length(classSize)){
+		corpus=c(corpus, sample(lexicon[lexicon$POS==i,]$ID, n/sum(classFrequency)*classFrequency[i], replace=T, prob=lexicon[lexicon$POS==i,]$prob))
+	}
+	corpus=table(corpus)
+	#determine frequency 
+	#NB frequency is determined by ID, hence homonymy and/or polysemy do not apply
+	lexicon$freq[match(names(corpus), lexicon$ID)]=corpus
+	lexicon=lexicon[order(lexicon$freq, decreasing=T),]
+	lexicon$rank=1:nrow(lexicon)
+	if(output==T){
+		zipf=lexicon[lexicon$freq>0,]
+		lim=log10(max(zipf$freq, zipf$rank))
+		min=round(mean(grep(paste('^',min(zipf$freq),'$',sep=''), zipf$freq)))
+		plot(log10(zipf$rank), log10(zipf$freq), xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim))
+		abline(log10(min), -1, lwd=2, lty=2)
+	}
+lexicon
+}
+
+BROWN=function(query, corpus=brown, pos='N'){
+	corpus=corpus[corpus$pos==pos,]
+	if(!is.data.frame(query)){
+		query=sum(corpus[corpus$type==query,]$freq)
+	}
+	if(is.data.frame(query)){
+		queries=gsub('^\\s+','',tolower(unlist(strsplit(query$noun, ', '))))
+		freqs=corpus$freq[match(queries, corpus$type)]
+		query$freq=0
+		freq=1
+		for(i in 1:nrow(query)){
+			n=query$nSynonyms2[i]
+			query$freq[i]=sum(freqs[freq:(freq+n-1)], na.rm=T)
+			freq=freq+n
+	}	}
+query
+}
+
+VMATCH=function(x, y, dimensions='byLength'){
+	if(!is.numeric(dimensions)){
+		if(dimensions=='byName'){dimensions=intersect(names(x), names(y))} else {
+			if(length(x) <= length(y)){dimensions=1:length(x)}
+			if(length(y) < length(x)){dimensions=1:length(y)}
+	}	}
+	x=x[dimensions]; y=y[dimensions]
+	if(is.data.frame(y)){
+		if(nrow(y) > 1){
+			if(is.vector(x)){z=as.data.frame(t(replicate(nrow(y),x)), stringsAsFactors=F)}
+			if(is.data.frame(x)){z=as.data.frame(t(replicate(nrow(y),unlist(x))), stringsAsFactors=F)}
+			diffs=abs(z-y)
+			vmatch=1-(rowSums(diffs, na.rm=T)/ncol(y))
+		} else {
+			diffs=abs(x-y)
+			vmatch=1-(rowSums(diffs, na.rm=T)/ncol(y))
+		}
+	} else {
+		diffs=abs(x-y)
+		vmatch=1-(sum(diffs, na.rm=T)/ncol(y))
+	}
+vmatch
+}
+
+ROSCH=function(nWords=1000, nDimensions=10, nSituations=10000, nDistractors=5, nCandidates=50){
+	print(paste("Developing lexicon and usage frequencies")); flush.console()
+	lexicon=as.data.frame(replicate(nDimensions,sample(c(NA, 0, 1), nWords, replace=T)),stringsAsFactors=F)
+	lexicon$ID=1:nWords; lexicon$spec=rowSums(!is.na(lexicon[,1:nDimensions])); lexicon$freq=0
+	lexicon$pApplicable=(1/2)^lexicon$spec
+	lexicon$pNoDistractors=(1-(1/2)^lexicon$spec )^nDistractors
+	lexicon$prob=lexicon$pApplicable*lexicon$pNoDistractors
+	pb  <- txtProgressBar(max=nSituations,style=3, char='*', width=round(.5*getOption("width")))
+	for(n in 1:nSituations){
+		situation=as.data.frame(replicate(nDimensions,sample(0:1, nDistractors, replace=T)),stringsAsFactors=F)
+		target=sample(0:1, nDimensions, replace=T)
+		lexicon$match=VMATCH(target, lexicon[,grep('^V\\d',names(lexicon))])
+		lexicon=lexicon[sample(nrow(lexicon)),]
+		lexicon=lexicon[order(lexicon$match, decreasing=T),]
+		for (i in 1:nCandidates){	
+			distractorMatch=max(VMATCH(lexicon[i,grep('^V\\d',names(lexicon))], situation))
+			if(lexicon[i,]$match > distractorMatch){
+				lexicon[i,]$freq=lexicon[i,]$freq+1
+				break()
+		}	}
+		setTxtProgressBar(pb, n)
+	}
+	close(pb)
+	lexicon=lexicon[order(lexicon$freq, decreasing=T),]
+	lexicon$rank=1:nrow(lexicon)
+lexicon
+}
+
+PREP=function(x){
+	x=x[(grep('start of this project', x, ignore.case=T)+1):(grep('end of this project', x, ignore.case=T)-1)]
+	x=tolower(unlist(strsplit(x, '\\s|\n|\\W')))
+	s=grep('^s$',x)
+	x[s-1]=paste(x[s-1],'s',sep="'")
+	x=x[grep('^s$',x, invert=T)]
+	x=x[x!=''&x!='â'] 
+x
+}
+
+############
+## output ##
+############
+
+moby.bk=scan("http://www.gutenberg.org/cache/epub/2701/pg2701.txt",what='char', sep='\n')
+moby.txt=PREP(moby.bk)
+moby=sort(xtabs(~moby.txt),decreasing=T)
+
+## FIGURE 1 ##
+par(mfrow=c(1,3))
+n=1:1000; freq=1000/n
+plot(n, freq, xlab='rank', ylab='frequency')
+text(max(n),max(freq), 'A', pos=2, cex=2)
+n=1:1000; freq=1000/n
+plot(log10(n), log10(freq), xlab='log rank', ylab='log frequency')
+text(log10(max(n)),log10(max(freq)), 'B', pos=2, cex=2)
+lim=log10(max(moby[1], length(moby)))
+plot(log10(1:length(moby)), log10(moby),xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim))
+text(lim, lim, 'C', pos=2, cex=2)
+min=round(mean(grep(paste('^',min(moby),'$',sep=''), moby)))
+abline(log10(min), -1, lwd=2, lty=2)
+
+## TABLE 1 ##
+#cgn
+cgnTable=data.frame(pos=names(table(cgn$pos)), freq=tapply(cgn$freq, cgn$pos, sum), size=as.vector(table(cgn$pos)), stringsAsFactors=F, row.names=NULL)
+cgnTable$freq=round(cgnTable$freq/sum(cgn$freq)*100,2)
+(cgnTable=cgnTable[order(cgnTable$freq/cgnTable$size, decreasing=T),])
+#brown
+brownTable=data.frame(pos=names(table(brown$pos)), freq=tapply(brown$freq, brown$pos, sum), size=as.vector(table(brown$pos)), stringsAsFactors=F, row.names=NULL)
+brownTable$freq=round(brownTable$freq/sum(brown$freq)*100,2)
+brownTable=head(brownTable[order(brownTable$freq, decreasing=T),], 10)
+(brownTable=brownTable[order(brownTable$freq/brownTable$size, decreasing=T),])
+#hnc
+hncTable=data.frame(pos=names(table(hnc$pos)), freq=tapply(hnc$freq, hnc$pos, sum), size=as.vector(table(hnc$pos)), stringsAsFactors=F, row.names=NULL)
+hncTable$freq=round(hncTable$freq/sum(hnc$freq)*100,2)
+hncTable=head(hncTable[order(hncTable$freq, decreasing=T),], 10)
+(hncTable=hncTable[order(hncTable$freq/hncTable$size, decreasing=T),])
+
+## FIGURE 2 ##
+syntax=ZIPF(classSize=cgnTable$size, classFrequency=cgnTable$freq, meaning=F, output=F)
+syntax=syntax[syntax$freq>0,]
+lim=log10(max(syntax$freq, syntax$rank))
+min=round(mean(grep(paste('^',min(syntax$freq),'$',sep=''), syntax$freq)))
+plot(log10(syntax$rank), log10(syntax$freq), type='n', xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim))
+text(log10(syntax$rank), log10(syntax$freq), syntax$POS)
+abline(log10(min), -1, lwd=2, lty=2)
+
+## FIGURE 3 ##
+#nouns=all concepts from wordnet
+#BROWN() checks for each concept how frequent it is in the Brown corpus
+nouns=BROWN(nouns)
+nouns=nouns[nouns$freq>0,]
+nouns=nouns[order(nouns$freq, decreasing=T),]
+nouns$rank=1:nrow(nouns)
+nouns[nouns$ID%in%c('04347754', '00002452'),]
+par(mfrow=c(5,4))
+for(i in sort(unique(nouns$spec))){
+	plot(log10(nouns$rank), log10(nouns$freq), col='lightgrey', xlim=c(0, log10(nrow(nouns))), ylim=c(0, log10(max(nouns$freq))), xlab='log rank', ylab='log freq', main=paste(i, 'dimensions'))
+	points(log10(nouns[nouns$spec==i & nouns$rank>50,]$rank), log10(nouns[nouns$spec==i & nouns$rank>50,]$freq))
+	points(log10(nouns[nouns$spec==i & nouns$rank<=50,]$rank), log10(nouns[nouns$spec==i & nouns$rank<=50,]$freq), col='red')
+	abline(v=log10(50), lty=2)
+}
+
+## FIGURE 4 ##
+simulation=ROSCH()
+par(mfrow=c(3,3))
+for(i in 1:9){
+	plot(log10(simulation$rank), log10(simulation$freq), col='lightgrey', xlim=c(0, log10(nrow(simulation))), ylim=c(0, log10(max(simulation$freq))), xlab='log rank', ylab='log freq', main=i)
+	points(log10(simulation[simulation$spec==i & simulation$rank>20,]$rank), log10(simulation[simulation$spec==i & simulation$rank>20,]$freq))
+	points(log10(simulation[simulation$spec==i & simulation$rank<=20,]$rank), log10(simulation[simulation$spec==i & simulation$rank<=20,]$freq), col='red')
+	abline(v=log10(20), lty=2)
+}
+
+## FIGURE 5 ##
+model=ZIPF(n=10^4, classSize=1000)
+par(mfrow=c(3,3))
+for(i in 1:9){
+	plot(log10(model$rank), log10(model$freq), col='lightgrey', xlim=c(0, log10(nrow(model))), ylim=c(0, log10(max(model$freq))), xlab='log rank', ylab='log freq', main=i)
+	points(log10(model[model$spec==i & model$rank>20,]$rank), log10(model[model$spec==i & model$rank>20,]$freq))
+	points(log10(model[model$spec==i & model$rank<=20,]$rank), log10(model[model$spec==i & model$rank<=20,]$freq), col='red')
+	abline(v=log10(20), lty=2)
+}
+
+## FIGURE 6 ##
+zipf=ZIPF(output=F)
+zipf=zipf[zipf$freq>0,]
+lim=log10(max(zipf$freq, zipf$rank))
+min=round(mean(grep(paste('^',min(zipf$freq),'$',sep=''), zipf$freq)))
+plot(log10(zipf$rank), log10(zipf$freq), xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim), type='n')
+text(log10(zipf$rank), log10(zipf$freq), zipf$POS)
+abline(log10(min), -1, lwd=2, lty=2)
+
+## FIGURE 7 ##
+zipfCC=ZIPF(n=sum(cgn$freq), classSize=cgnTable$size, classFrequency=cgnTable$freq)
+zipfCB=ZIPF(n=sum(cgn$freq), classSize=brownTable$size, classFrequency=brownTable$freq)
+zipfBB=ZIPF(n=sum(brown$freq), classSize=brownTable$size, classFrequency=brownTable$freq)
+zipfBC=ZIPF(n=sum(brown$freq), classSize=cgnTable$size, classFrequency=cgnTable$freq)
+par(mfrow=c(1,2))
+#cgn
+lim=log10(max(cgn$freq, cgn$rank))
+min=round(mean(grep(paste('^',min(cgn$freq),'$',sep=''), cgn$freq)))
+plot(log10(cgn$rank), log10(cgn$freq), xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim))
+abline(log10(min), -1, lwd=2, lty=2)
+points(log10(zipfCC$rank), log10(zipfCC$freq), pch=2, col='blue')
+points(log10(zipfCB$rank), log10(zipfCB$freq), pch=3, col='red')
+#brown
+lim=log10(max(brown$freq, brown$rank))
+min=round(mean(grep(paste('^',min(brown$freq),'$',sep=''), brown$freq)))
+plot(log10(brown$rank), log10(brown$freq), xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim))
+abline(log10(min), -1, lwd=2, lty=2)
+points(log10(zipfBB$rank), log10(zipfBB$freq), pch=2, col='blue')
+points(log10(zipfBC$rank), log10(zipfBC$freq), pch=3, col='red')
+
+## Class-size predictions ##
+sum(moby)
+sum(moby[names(moby)%in%c('the','an','a')])/sum(moby)
+length(moby)

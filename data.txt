@@ -1,0 +1,378 @@
+###########
+## BROWN ##
+###########
+
+setwd(choose.dir())	#.../Data/brown/files
+
+file=tolower(scan(dir()[1], what='char'))
+file=file[file!='']; file=unlist(strsplit(file, ' '))
+brown=unique(data.frame(type=unique(file), freq=as.vector(xtabs(~file)), stringsAsFactors=F))
+names(brown)[2]=dir()[1]
+
+pb  <- txtProgressBar(max=length(dir()),style=3, char='=')
+for(i in 2:length(dir())){
+	setTxtProgressBar(pb, i)
+	file=tolower(scan(dir()[i], what='char'))
+	file=file[file!='']; file=unlist(strsplit(file, ' '))
+	table=unique(data.frame(type=unique(file), freq=as.vector(xtabs(~file)), stringsAsFactors=F))
+	names(table)[2]=dir()[i]
+	brown=merge(brown, table, all=T)
+}
+close(pb)
+
+brown$freq=rowSums(brown[,2:ncol(brown)], na.rm=T)
+brown=brown[order(brown$freq, decreasing=T),]
+brown$pos=gsub('.*/','',brown$type)
+brown$type=gsub('/.*','',brown$type)
+brown=brown[,c('type','pos','freq')]
+
+#clean up
+brown=brown[grep('^\\W$',brown$type, invert=T),]
+brown=brown[grep('\n',brown$type, invert=T),]
+brown=brown[grep('^\\W$', brown$type, invert=T),]
+brown=brown[!(brown$pos=='ART'&brown$freq<100),]
+
+#identify NEG clitic
+brown[nrow(brown)+1,]=c('=not', 'NEG', sum(brown[grep('.\\*', brown$pos),]$freq))
+brown$freq=as.numeric(brown$freq)
+brown[brown$pos=='*',]$pos='NEG'
+brown$pos=gsub('\\*','', brown$pos)
+
+#Note that some versions of the tagged Brown corpus contain combined tags. For instance the word "wanna" is tagged VB+TO, since it is a contracted form of the two words, want/VB and to/TO. Also some tags might be negated, for instance "aren't" would be tagged "BER*", where * signifies the negation. Additionally, tags may have hyphenations: The tag -HL is hyphenated to the regular tags of words in headlines. The tag -TL is hyphenated to the regular tags of words in titles. The hyphenation -NC signifies an emphasized word. Sometimes the tag has a FW- prefix which means foreign word.
+brown$pos=toupper(brown$pos)
+brown$pos=gsub('-TL','', brown$pos)
+brown$pos=gsub('-NC','', brown$pos)
+
+V=c(
+'BE', 	# 	be
+'BED', 	# 	were
+'BEDZ', 	# 	was
+'BEG', 	# 	being
+'BEM', 	# 	am
+'BEN', 	# 	been
+'BER', 	# 	are, art
+'BEZ', 	# 	is
+'DO', 	# 	do
+'DOD', 	# 	did
+'DOZ', 	# 	does
+'HV', 	# 	have
+'HVD', 	# 	had (past tense)
+'HVG', 	# 	having
+'HVN', 	# 	had (past participle)
+'MD', 	# 	modal auxiliary (can, should, will)
+'VB', 	# 	verb, base form
+'VBD', 	# 	verb, past tense
+'VBG', 	# 	verb, present participle/gerund
+'VBN', 	# 	verb, past participle
+'VBP', 	# 	verb, non 3rd person, singular, present
+'VBZ' 	#	verb, 3rd. singular present
+)
+brown[brown$pos%in%V,]$pos='V'
+
+CON=c(
+'CC',	# 	coordinating conjunction (and, or)
+'CS'	# 	subordinating conjunction (if, although)
+)
+brown[brown$pos%in%CON,]$pos='CON'
+
+NUM=c(
+'CD',	# 	cardinal numeral (one, two, 2, etc.)
+'OD'	# 	ordinal numeral (first, 2nd)
+)
+brown[brown$pos%in%NUM,]$pos='NUM'
+
+DET=c(
+'DT', 	#	singular determiner/quantifier (this, that)
+'DTI', 	# 	singular or plural determiner/quantifier (some, any)
+'DTS', 	# 	plural determiner (these, those)
+'DTX', 	# 	determiner/double conjunction (either)
+'AP' 	#	post-determiner (many, several, next)
+)
+brown[brown$pos%in%DET,]$pos='DET'
+
+A=c(
+'JJ', 	#	adjective
+'JJR', 	# 	comparative adjective
+'JJS', 	# 	semantically superlative adjective (chief, top)
+'JJT' 	# 	morphologically superlative adjective (biggest)
+)
+brown[brown$pos%in%A,]$pos='A'
+
+N=c(
+'NN', 	#	singular or mass noun
+'NN$', 	# 	possessive singular noun
+'NNS', 	# 	plural noun
+'NNS$', # 	possessive plural noun
+'NP', 	#	proper noun or part of name phrase
+'NP$', 	# 	possessive proper noun
+'NPS', 	# 	plural proper noun
+'NPS$',	# 	possessive plural proper noun
+'NR' 	#adverbial noun (home, today, west)
+)
+brown[brown$pos%in%N,]$pos='N'
+
+PRO=c(
+'PN', 	#	nominal pronoun (everybody, nothing)
+'PN$', 	# 	possessive nominal pronoun
+'PP$', 	# 	possessive personal pronoun (my, our)
+'PP$$',	# 	second (nominal) possessive pronoun (mine, ours)
+'PPL', 	#	singular reflexive/intensive personal pronoun (myself)
+'PPLS',	# 	plural reflexive/intensive personal pronoun (ourselves)
+'PPO',	#	objective personal pronoun (me, him, it, them)
+'PPS',	#	3rd. singular nominative pronoun (he, she, it, one)
+'PPSS',	# 	other nominative personal pronoun (I, we, they, you)
+'PRP',	# 	Personal pronoun
+'PRP$'	# 	Possessive pronoun
+)
+brown[brown$pos%in%PRO,]$pos='PRO'
+
+ADV=c(
+'RB', 	#	adverb
+'RBR', 	# 	comparative adverb
+'RBT', 	# 	superlative adverb
+'RN ', 	#	nominal adverb (here, then, indoors)
+'RP',	# 	adverb/particle (about, off, up)
+'QL'	# 	qualifier (very, fairly)
+)
+brown[brown$pos%in%ADV,]$pos='ADV'
+
+WH=c(
+'WDT', 	# 	wh- determiner (what, which)
+'WP$', 	# 	possessive wh- pronoun (whose)
+'WPO', 	# 	objective wh- pronoun (whom, which, that)
+'WPS', 	# 	nominative wh- pronoun (who, which, that)
+'WQL',	# 	wh- qualifier (how)
+'WRB'	# 	wh- adverb (how, where, when)
+)
+brown[brown$pos%in%WH,]$pos='WH'
+
+#IN 	preposition
+brown[brown$pos=='IN',]$pos='P'
+#AT 	article (a, the, no)
+brown[brown$pos=='AT',]$pos='ART'
+
+#NC 	cited word (hyphenated after regular tag)
+#QLP 	post-qualifier (enough, indeed)
+#TO 	infinitive marker to
+#UH 	interjection, exclamation
+#EX 	existential there
+#FW 	foreign word (hyphenated before regular tag)
+#ABL 	pre-qualifier (quite, rather)
+#ABN 	pre-quantifier (half, all)
+#ABX 	pre-quantifier (both)
+
+brown=brown[order(brown$freq, decreasing=T),]
+brown$rank=1:nrow(brown)
+
+
+#############
+## WordNet ##
+#############
+
+setwd(choose.dir())	#.../WordNet-3.0/dict
+nouns=scan('data.noun', what='char', sep='\n')
+
+WORDNETNOUNS=function(nouns){
+	defs=gsub('.*\\| (.*)', '\\1', nouns)
+	nouns=gsub('(.*) \\|.*', '\\1', nouns)
+	rest=gsub('^.*? ([@#;~+-].*)','\\1',nouns)
+	nouns=gsub('(^.*?) [@#;~+-].*','\\1',nouns)
+	IDs=gsub('(\\d{8} \\d{2} . .{2}).*', '\\1', nouns)
+	code1=as.numeric(gsub('\\d{8} (\\d{2}) .*','\\1',IDs))
+	nSynonyms=gsub('\\d{8} \\d{2} . (.{2})','\\1',IDs)
+	IDs=gsub(' \\d{2} . .{2}','',IDs)
+	nouns=gsub('\\d{8} \\d{2} . .{2} (.*)', '\\1', nouns)
+	code2=gsub('^.*? (.) .*?$','\\1',nouns)
+	nRels=as.numeric(gsub('^.*? . (.*?)$','\\1',nouns))
+	nouns=gsub('. \\d{3}$','',nouns)
+	nouns=gsub('^\\s|\\s$','', nouns)
+	nSynonyms2=nchar(nouns)-nchar(gsub(' \\d ','  ',nouns))+1
+	nouns=gsub(' \\d ',', ', nouns)
+	nSupers=nchar(gsub('[^@]','', rest))
+	super=gsub('\\+ \\d{8} \\w .{4} ','', rest)
+	super=gsub('[~%#-;!=].? \\d{8} \\w .{4}','', super)
+	super=gsub('\\s+$','', super)
+	super=gsub('\\s+',' ', super)
+	super=gsub('@.? ','',super)
+	super=gsub(' n \\d{4}', '', super)
+	rest=gsub('@.? \\d{8} \\w .{4}','', rest)
+	nSubs=nchar(gsub('[^~]','', rest))
+	sub=gsub('\\+ \\d{8} \\w .{4} ','', rest)
+	sub=gsub('[%#-;!=].? \\d{8} \\w .{4}','', sub)
+	sub=gsub('\\s+$','', sub)
+	sub=gsub('\\s+',' ', sub)
+	sub=gsub('~.? ','',sub)
+	sub=gsub('^\\s','',sub)
+	sub=gsub(' n \\d{4}', '', sub)
+	rest=gsub('\\s?~.? \\d{8} \\w .{4}','', rest)
+	nouns=data.frame(ID=as.numeric(IDs), noun=nouns, nSupers=nSupers, super=super, nSubs=nSubs, sub=sub, nSynonyms=nSynonyms, nSynonyms2=nSynonyms2, def=defs, stringsAsFactors=F)
+	nouns[nchar(nouns$super)==9,]$super=gsub(' ', '', nouns[nchar(nouns$super)==9,]$super)
+	nouns$ID=as.character(nouns$ID)
+	grep(' ', nouns$ID)
+	ff=nchar(nouns$ID)
+	nouns$ID[ff==4]=paste('0000',nouns$ID[ff==4], sep='')
+	nouns$ID[ff==5]=paste('000',nouns$ID[ff==5], sep='')
+	nouns$ID[ff==6]=paste('00',nouns$ID[ff==6], sep='')
+	nouns$ID[ff==7]=paste('0',nouns$ID[ff==7], sep='')
+	rm(ff)
+	nouns$spec=999
+	nouns[nouns$super=='',]$spec=0
+	for(k in 0:20){
+		for (i in 1:6){
+			ff=nouns[nouns$nSupers==i,]
+			for(j in 1:i){
+				ff2=unlist(strsplit(ff$super, ' '))
+				match=ff2[seq(j, length(ff2), i)] %in% nouns[nouns$spec==k,]$ID
+				if(sum(match)>0){ff[match,]$spec=k+1}
+			}
+			nouns[nouns$nSupers==i,]$spec=ff$spec
+	}	}
+	nouns=nouns[nouns$spec<999,]
+nouns
+}
+
+nouns=WORDNETNOUNS(nouns)
+
+#########
+## CGN ##
+#########
+
+setwd(choose.dir())	#.../CGN/data/lexicon/freqlists"
+cgn=scan('totalph.frq', what='char',sep='\n', skip=1)
+tags=scan('tagalph.frq', what='char',sep='\n')
+pos=scan('lemalph.frq', what='char',sep='\n', skip=1)
+
+item=gsub('.*\\s(.*?)$','\\1',cgn)
+freq=as.numeric(gsub('.*:\\s+(\\d+).*','\\1',cgn))
+stoplist=c('.','...','xxx','?')
+freq=freq[!item%in%stoplist]
+item=item[!item%in%stoplist]
+order=order(freq, decreasing=T)
+item=item[order]
+freq=freq[order]
+raw=data.frame(word=item, freq=freq, stringsAsFactors=F)
+
+tags=tags[-grep('\\(',tags)]
+freq=as.numeric(gsub('.*\\s(\\d+)\\s.*','\\1',tags))
+tag=gsub('\\d','',tags)
+tags=data.frame(freq=freq, tag=tag, stringsAsFactors=F)
+tags=tags[order(tags$freq, decreasing=T),]
+
+pos=pos[grep('\\w\\(', pos)]
+lemma=gsub('.*\\s(.*?)$','\\1',pos)
+tag=gsub('.*\\s(\\w+)\\(.*','\\1',pos)
+tag2=gsub('.*\\s(\\w+\\(.*?\\)).*','\\1',pos)
+freq=as.numeric(gsub('.*?\\d+\\s+\\d+\\s+(\\d+)\\s.*', '\\1', pos))
+cgn=data.frame(freq=freq, pos=tag, lemma=lemma, stringsAsFactors=F)
+cgn$lemma=tolower(cgn$lemma)
+cgn=cgn[-grep('/', cgn$lemma),]#remove mispronunciations etc.: -180.000
+cgn=cgn[cgn$lemma!='ggg',]; cgn=cgn[cgn$lemma!='xxx',] 
+
+cgn=cgn[order(cgn$pos, cgn$lemma),]
+check1=paste(cgn$pos, cgn$lemma)
+check2=check1[2:length(check1)]
+check1=check1[1:length(check2)]
+doubles=1:nrow(cgn)
+doubles=doubles[check1==check2]
+test=sum(cgn$freq)
+for(i in doubles){
+	cgn$freq[i+1]=cgn$freq[i+1]+cgn$freq[i]
+}
+cgn=cgn[-doubles,]
+sum(cgn$freq)==test
+cgn=cgn[order(cgn$freq, decreasing=T),]
+cgn$rank=1:nrow(cgn)
+
+cgn$pos[cgn$pos=='TSW']='INT'
+cgn$pos[cgn$pos=='LID']='ART'
+cgn$pos[cgn$pos=='VG']='CON'
+cgn$pos[cgn$pos=='VNW']='PRO'
+cgn$pos[cgn$pos=='WW']='V'
+cgn$pos[cgn$pos=='VZ']='P'
+cgn$pos[cgn$pos=='BW']='ADV'
+cgn$pos[cgn$pos=='TW']='NUM'
+
+#remove obscure examples
+cgn=cgn[!(cgn$pos=='ART'&cgn$freq<500),]
+cgn=cgn[!(cgn$pos=='PRO'&cgn$freq<500),]
+cgn=cgn[!(cgn$pos=='CON'&cgn$freq<100),]
+cgn=cgn[!(cgn$pos=='P'&cgn$freq<10),]
+
+#clean up
+rm(list=ls()[-grep('cgn', ls())]
+
+
+#########
+## HNC ##
+#########
+
+#scan HNC freqlist. NB encoding of txt file
+hnc.ruw=scan(file.choose(), what='char', sep='\n')
+hnc.split=unlist(strsplit(hnc.ruw, '\t'))
+head(hnc.ruw); head(hnc.split)
+hnc=data.frame(
+	hnc.split[seq(1, length(hnc.split), 8)],
+	hnc.split[seq(2, length(hnc.split), 8)],
+	hnc.split[seq(3, length(hnc.split), 8)],
+	hnc.split[seq(4, length(hnc.split), 8)],
+	hnc.split[seq(5, length(hnc.split), 8)],
+	hnc.split[seq(6, length(hnc.split), 8)],
+	hnc.split[seq(7, length(hnc.split), 8)],
+	hnc.split[seq(8, length(hnc.split), 8)]
+)
+names(hnc)=c('token', 'morphology', 'type', 'pos', 'subcorpus', 'region', 'first', 'freq')
+hnc$freq=as.numeric(as.character(hnc$freq))
+hnc$first=ifelse(hnc$first=='-',0,1)
+hnc$id=paste(hnc$token, hnc$morphology, sep='-')
+hnc$id=paste(hnc$id, hnc$type, sep='-')
+hnc$id=paste(hnc$id, hnc$pos, sep='-')
+hnc$id=paste(hnc$id, hnc$subcorpus, sep='-')
+hnc$id=paste(hnc$id, hnc$region, sep='-')
+hnc$id=paste(hnc$id, hnc$first, sep='-')
+hnc$id=tolower(hnc$id)
+hnc=hnc[order(hnc$freq, decreasing=T),]
+head(hnc)
+
+#remove variation in capitalization
+hnc.bk=hnc
+hnc=hnc[match(unique(hnc$id), hnc$id),]
+freqs=tapply(hnc.bk$freq, hnc.bk$id, sum)
+sum(freqs)==sum(hnc.bk$freq)
+sum(hnc$freq)==sum(hnc.bk$freq)
+hnc$freq=freqs[match(hnc$id, names(freqs))]
+sum(hnc$freq)==sum(hnc.bk$freq)
+hnc$id=paste(hnc$token, hnc$morphology, sep='-')
+hnc$id=paste(hnc$id, hnc$type, sep='-')
+hnc$id=paste(hnc$id, hnc$pos, sep='-')
+hnc$id=paste(hnc$id, hnc$subcorpus, sep='-')
+hnc$id=paste(hnc$id, hnc$region, sep='-')
+hnc$id=tolower(hnc$id)
+sum(hnc$freq)==sum(hnc.bk$freq)
+
+#add up sentence initial occurences
+hnc.bk=hnc
+first=hnc[hnc$first==1,]
+hnc=hnc[hnc$first==0,]
+move=!first$id%in%hnc$id
+hnc=rbind(hnc, first[move,])
+first=first[!move,]
+hnc[hnc$id%in%first$id,]$freq=hnc[hnc$id%in%first$id,]$freq+first[na.omit(match(hnc$id, first$id)),]$freq
+sum(hnc$freq)==sum(hnc.bk$freq)
+
+#add up morphosyntactic variants
+hnc.bk=hnc
+hnc$id=paste(hnc$type, hnc$pos, sep='-')
+hnc$id=paste(hnc$id, hnc$subcorpus, sep='-')
+hnc$id=paste(hnc$id, hnc$region, sep='-')
+hnc$id=tolower(hnc$id)
+
+lemma=hnc[match(unique(hnc$id), hnc$id),]
+freqs=tapply(hnc$freq, hnc$id, sum)
+sum(freqs)==sum(hnc$freq)
+lemma$freq=freqs[match(lemma$id, names(freqs))]
+sum(lemma$freq)==sum(hnc$freq)
+rm(freqs)
+
+#write.csv2(hnc[hnc$region=='magy'&hnc$subcorpus=='press',], 'hnc.csv')
+
+
