@@ -206,8 +206,13 @@ par(mfrow=c(1,1))
 lim=max(log10(lexicon[1]), log10(nrow(lexicon)))
 min=log10(mean(grep('^1$', lexicon)))
 plot(log10(1:length(lexicon)), log10(as.vector(lexicon)), xlim=c(0, lim), ylim=c(0,lim), ylab='log frequency', xlab='log rank', main='')
+P=10^4.6; B=1.1; m=100; n=1:12000
+freq=P*(n+m)^-B
+lines(log10(n), log10(freq), lwd=2, lty=1)
 abline(min, -1, lwd=2, lty=2)
 #dev.off()
+
+
 
 #non-overlap begin-end
 corpus=attachment[[2]]
