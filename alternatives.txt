@@ -1,15 +1,3 @@
-## function necessary to prepare texts from Gutenberg.org for analysis ##
-
-PREP=function(x){
-	x=x[(grep('start of this project', x, ignore.case=T)+1):(grep('end of this project', x, ignore.case=T)-1)]
-	x=tolower(unlist(strsplit(x, '\\s|\n|\\W')))
-	s=grep('^s$',x)
-	x[s-1]=paste(x[s-1],'s',sep="'")
-	x=x[grep('^s$',x, invert=T)]
-	x=x[x!=''&x!='â'] 
-x
-}
-
 ## miller ##
 
 #funtion to create a random text of specified length (in number of characters)
@@ -27,7 +15,7 @@ MILLER=function(length=10^6, prob=1){
 sort(xtabs(~text), decreasing=T)
 }
 
-#Miller panel A
+#FIGURE 8 panel A
 miller=MILLER(10^7)
 plot(log10(1:length(miller)), log10(as.vector(miller)))
 min=round(mean(grep(paste('^',min(miller),'$',sep=''), miller)))
@@ -35,8 +23,8 @@ abline(log10(min), -1, lwd=2, lty=2)
 
 #after obtaining Melville's Moby Dick from gutenberg.org
 moby.bk=scan("texts/moby.txt",what='char', sep='\n')
+#for PREP function, cf. S1 File. Scripts
 moby.txt=PREP(moby.bk)
-moby=sort(xtabs(~moby.txt),decreasing=T)
 
 #determine probability of characters in real text (Melville's Moby Dick)
 millerProbs=paste(moby.txt, collapse=' ')
@@ -45,7 +33,7 @@ millerProbs=xtabs(~millerProbs)
 millerProbs=millerProbs[names(millerProbs)%in%c(letters, ' ')]
 millerProbs=round(prop.table(millerProbs), 3)
 
-#Miller panel B
+#FIGURE 8 panel B
 millerPlus=MILLER(10^7, prob=as.vector(millerProbs))
 plot(log10(1:length(millerPlus)), log10(as.vector(millerPlus)))
 min=round(mean(grep(paste('^',min(millerPlus),'$',sep=''), millerPlus)))
@@ -53,6 +41,7 @@ abline(log10(min), -1, lwd=2, lty=2)
 
 ###compare actual frequency of words with that predicted by Miller on the basis of character probability
 ##first set up data frame with actual frequencies and a starting "millerProb" of 1 (to be adjusted later)
+moby=sort(table(moby.txt), decreasing=T)
 millerTxt=data.frame(item=names(moby), rank=1:length(moby), freq=as.vector(moby), millerProb=1)
 ##next determine predicted probability for each word by multiplying probabilities of its characters
 #for each character (excluding word break)
@@ -73,11 +62,22 @@ millerTxt$millerRank=1:nrow(millerTxt)
 millerTxt=millerTxt[order(millerTxt$rank),]
 #inspect results
 head(millerTxt, 20)
-cor(millerTxt$rank, millerTxt$millerRank)
+millerTxt[grep('moby', millerTxt$item),]
 
-#Miller panel C
-plot(millerTxt$rank, millerTxt$millerRank)
+#FIGURE 8 panel C
+plot(millerTxt$rank, millerTxt$millerRank, ylab='actual rank', xlab='Miller rank')
 
+#Figure 8 combined
+#tiff(filename='plots/Fig8.tif', width=2250, height=798, res=300, units='px',pointsize=11,bg='white',compression='lzw',restoreConsole=TRUE)
+par(mfrow=c(1,3))
+plot(log10(1:length(miller)), log10(as.vector(miller)), main='A', xlab='log rank', ylab='log frequency')
+min=round(mean(grep(paste('^',min(miller),'$',sep=''), miller)))
+abline(log10(min), -1, lwd=2, lty=2)
+plot(log10(1:length(millerPlus)), log10(as.vector(millerPlus)), main='B', xlab='log rank', ylab='log frequency')
+min=round(mean(grep(paste('^',min(millerPlus),'$',sep=''), millerPlus)))
+abline(log10(min), -1, lwd=2, lty=2)
+plot(millerTxt$rank, millerTxt$millerRank, main='C')
+#dev.off()
 
 ## mandelbrot ##
 
@@ -104,7 +104,11 @@ joyce.bk=scan("texts/joyce.txt",what='char', sep='\n')
 joyce.txt=PREP(joyce.bk)
 joyce=sort(xtabs(~joyce.txt),decreasing=T)
 
-#Mandelbrot panel A
+#FIGURE 9 
+#tiff(filename='plots/Fig9.tif', width=1578, height=1578, res=300, units='px',pointsize=11,bg='white',compression='lzw',restoreConsole=TRUE)
+par(mfrow=c(2,2))
+#moby
+lim=log10(max(moby[1], length(moby)))
 plot(log10(1:length(moby)), log10(as.vector(moby)),xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim), col='grey60')
 mobyPars=PARAMETERS(moby)
 B=mobyPars[[1]]; P=mobyPars[[2]]; n=mobyPars[[3]]
@@ -114,8 +118,9 @@ lines(log10(1:n), log10(freq), lwd=2)
 min=round(mean(grep(paste('^',min(moby),'$',sep=''), moby)))
 lim=log10(max(moby[1], length(moby)))
 abline(log10(min), -1, lwd=2, lty=2)
-
-#Mandelbrot panel B
+text(4, 4, 'A')
+#Sense
+lim=log10(max(sense[1], length(sense)))
 plot(log10(1:length(sense)), log10(as.vector(sense)),xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim), col='grey60')
 sensePars=PARAMETERS(sense)
 B=sensePars[[1]]; P=sensePars[[2]]; n=sensePars[[3]]
@@ -125,8 +130,9 @@ lines(log10(1:n), log10(freq), lwd=2)
 min=round(mean(grep(paste('^',min(sense),'$',sep=''), sense)))
 lim=log10(max(sense[1], length(sense)))
 abline(log10(min), -1, lwd=2, lty=2)
-
-#Mandelbrot panel C
+text(3.5, 3.5, 'B')
+#Twain
+lim=log10(max(twain[1], length(twain)))
 plot(log10(1:length(twain)), log10(as.vector(twain)),xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim), col='grey60')
 twainPars=PARAMETERS(twain)
 B=twainPars[[1]]; P=twainPars[[2]]; n=twainPars[[3]]
@@ -136,8 +142,9 @@ lines(log10(1:n), log10(freq), lwd=2)
 min=round(mean(grep(paste('^',min(twain),'$',sep=''), twain)))
 lim=log10(max(twain[1], length(twain)))
 abline(log10(min), -1, lwd=2, lty=2)
-
-#Mandelbrot panel D
+text(3.5, 3.5, 'C')
+#Joyce
+lim=log10(max(joyce[1], length(joyce)))
 plot(log10(1:length(joyce)), log10(as.vector(joyce)),xlab='log rank',ylab='log frequency',cex.lab=1,lwd=2, xlim=c(0, lim), ylim=c(0, lim), col='grey60')
 joycePars=PARAMETERS(joyce)
 B=joycePars[[1]]; P=joycePars[[2]]; n=joycePars[[3]]
@@ -147,9 +154,17 @@ lines(log10(1:n), log10(freq), lwd=2)
 min=round(mean(grep(paste('^',min(joyce),'$',sep=''), joyce)))
 lim=log10(max(joyce[1], length(joyce)))
 abline(log10(min), -1, lwd=2, lty=2)
+text(4, 4, 'D')
+#dev.off()
 
-
-
+mobyPars
+head(moby)
+joycePars
+head(joyce)
+sensePars
+head(sense)
+twainPars
+head(twain)
 
 ## Jaeger and van Rooij ##
 JR=function(corpusSize=10^5, lexicon=10^5, oddsSameWord=7, contextWindow=100){
@@ -182,11 +197,20 @@ JR=function(corpusSize=10^5, lexicon=10^5, oddsSameWord=7, contextWindow=100){
 	list(lexicon=lexicon, corpus=corpus)
 }
 
-coherence=JR(corpusSize=10^5, lexicon=10^5, oddsSameWord=7, contextWindow=100)
-table=sort(xtabs(~coherence[[2]]), decreasing=T)
+attachment=JR(corpusSize=10^5, lexicon=10^5, oddsSameWord=7, contextWindow=100)
+lexicon=sort(table(attachment[[2]]), decreasing=T)
+
+#FIGURE 10
+#tiff(filename='plots/Fig10.tif', width=789, height=789, res=300, units='px',pointsize=11,bg='white',compression='lzw',restoreConsole=TRUE)
+par(mfrow=c(1,1))
+lim=max(log10(lexicon[1]), log10(nrow(lexicon)))
+min=log10(mean(grep('^1$', lexicon)))
+plot(log10(1:length(lexicon)), log10(as.vector(lexicon)), xlim=c(0, lim), ylim=c(0,lim), ylab='log frequency', xlab='log rank', main='')
+abline(min, -1, lwd=2, lty=2)
+#dev.off()
 
 #non-overlap begin-end
-corpus=coherence[[2]]
+corpus=attachment[[2]]
 first=sort(xtabs(~corpus[1:10000]), decreasing=T)
 last=sort(xtabs(~corpus[90001:100000]), decreasing=T)
 top1=names(first)[1:50]
@@ -194,26 +218,10 @@ top2=names(last)[1:50]
 intersect(top1, top2)
 
 
-##Guiraud
-
-GUIRAUD=function(lexicon){
-	classSize=unique(lexicon$POS)
-	for(i in 1:length(classSize)){
-		nMeanings=nrow(lexicon[lexicon$POS==i,])
-		nMeaningCols=ceiling(log(nMeanings, 3))
-		guiraud=as.data.frame(replicate(nMeaningCols,rep(0,3^nMeaningCols)),stringsAsFactors=F)
-		for(j in 1:nMeaningCols){guiraud[,j]=rep_len(sort(rep(c(0, 1, NA), 3^(j-1)), na.last=T), length.out=3^nMeaningCols)}
-		guiraud=guiraud[rowSums(!is.na(guiraud))>0,]
-		guiraud=guiraud[sample(nrow(guiraud), nMeanings),]
-		lexicon[lexicon$POS==i,]$prob=round(.5^rowSums(!is.na(guiraud)),2)
-	}
-lexicon
-}
-
 ## manin 
-
 MANIN=function(dimensionality=9){
 lexicon=as.data.frame(replicate(dimensionality,rep(0,2^dimensionality)),stringsAsFactors=F)
+	#setup lexicon
 	for(i in 1:dimensionality){
 		lexicon[,i]=rep_len(sort(rep(c(0, 1), 2^(i-1))), length.out=2^dimensionality)
 	}
@@ -228,5 +236,15 @@ lexicon=as.data.frame(replicate(dimensionality,rep(0,2^dimensionality)),stringsA
 	lexicon=lexicon[order(lexicon$prob, decreasing=T),]
 	lexicon
 }
-
 manin=MANIN(19)
+head(manin); tail(manin)
+
+#tiff(filename='plots/Fig11.tif', width=789, height=789, res=300, units='px',pointsize=11,bg='white',compression='lzw',restoreConsole=TRUE)
+par(mfrow=c(1,1))
+lim=max(log10(manin$prob[1]), log10(nrow(manin)))
+min=log10(mean(grep('^1$', manin$prob)))
+plot(log10(1:nrow(manin)), log10(manin$prob), xlim=c(0, lim), ylim=c(0,lim), ylab='log frequency', xlab='log rank', main='')
+abline(min, -1, lwd=2, lty=2)
+#dev.off()
+
+
