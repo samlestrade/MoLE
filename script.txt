@@ -66,7 +66,7 @@ lexicon
 
 #function to determine total frequency of wordnet noun(s) in Brown corpus
 BROWN=function(){
-	#brown corpus should be in R working directory
+	#brown corpus should be in R working space
 	corpus=brown[brown$pos=='N',]
 	#queries are wordnet nouns, which may involve synonyms
 	queries=gsub('^\\s+','',tolower(unlist(strsplit(as.character(wordnet$noun), ', '))))
