@@ -1,14 +1,4 @@
-######### RUN #############
-#setwd("u:/documents/papers and projects/in prep/model (veni)")	#pc
-#setwd("/Volumes/tensusers/slestrade")	#mac
-#setwd("/Users/samlestrade/Documents/Sam")	#mac2
-#setwd("//derpy.science.ru.nl/tensusers2/slestrade/MoLE")	#derpy
-rm(list=ls()); source('MoLE.R')
-world$deathAge=500; world$nNouns=199; world$nVerbs=99
-FOUND(nAgents=2)
-RUN(6)
-
-##### TO DOs for later ##############
+##### TO DOs ##############
 threshold pro->VM hoger?
 CHECKSUCCESS: person clear?
 RECRUITMENT/REFCHECK personafhankelijk
@@ -21,75 +11,3 @@ develop structure incrementally, reanalyse only if stuck
 shallow parsing: semantics overrule syntax
 optimal stopping rule (huwelijksprobleem)
 word activation a la Anderson 1993, Ch4/Anderson and Lebiere 1998: activation A=log(sum(t - t_j^d)); retrieval time: Fe^(-fA)
-
-
-#### NB #####
-activationImpact does not matter for word order, only for lexeme selection
-for FIFO, activation is match plus resting activation
-REFCHECK zegt first-person internal argument te kort; GENERALIZE zegt first-person marken als actor; niet nodig omdat first-person participant als undergoer was bedoeld; bij VM 2 opties: first-person participant of actor (door GENERALIZE) of undergoer (door REFCHECK)
-Als systeem ACC, dan maar 1 keer ontwikkeling van acc pronomen. Als later onduidelijk omdat erg variant VM is geworden, wordt meestal noun acc gemarkeerd (want erg marker niet ontwikkeld).
-activation: Chafe 197X in Du Bois
-als resolutionMethod==BESTMARKER, dan niet zomaar ontwikkeling van een nieuwe pronoun, want afhankelijk van welke markeerder ontwikkeld is.
-REFCHECK: pronoun niet uitgekozen op match met verbRole (maar op basis van prominentie). Later (evt.) rol markeren
-INTERPRET:: bidirectioneel: als agentFirst==T en 1 niet gemarkeerd, dan gewoon agent -> alleen erg of acc markering bij topic Us
-activation is not a factor in word recognition. It should really, but impact is different from production (no equivalent to CHECKSUCCESS here)
-if activation too strong, success breaks down. Forms no longer recognised (and adjusted to most frequent ones)
-for hearer, unless marked explicitly: topic is participant that was mentioned in previous utterance too
-no linking, no case markers
-case marking if word order: new generation without word-order generalization
-if alignmentBlocking=T, no case markers either
-simple inhibition too strong for larger lexicons?
-in Dahl numbers, grammaticalization of preferences already took effect. Preference of local/A for external should come from preference for Actor... Roles of verbs should not be "internal" and "external" from start, but equal
-new participants more likely in internal role
-if frequency impact too high, simulation slows down (many frequent candidates insufficient)
-VERBMORPHOLOGY: if V-x-y A, resolution either through match with A, or on basis of role qualification of A, and then taking internal suffix to be internal. Now first route (but only if there was a choice).
-VERBMORPHOLOGY 2: if two suffixes, internal one has internal role
-pro-index is counted as argument, not as verb marker
-distinguish invention from spread: invention by speaker, spread if hearer copies
-Verb markers overrule verb suffixes (if both are used)
-Verb suffixes in principe niet voor desambiguering, pas als ext/int vaker agreement vertoont!
-Desem with % uttsnewborn agents initially only listen (to learn new pronoun system)
-for sake of ease, desemanticization simplified to single point in lifetime (just before procreation). 
-Grice: say no more than you must: least specified expressions are tried first
-Hopper 1991,22: layering. New words variants of old ones, that remain in the lexicon.
-Clark 1990: function blocking
-
-#### CHECK #####
-#speakerID=sample(length(population), 1); if(length(population)==2){hearerID=setdiff(1:length(population),speakerID)}; if(length(population) > 2){hearerID=sample(setdiff(1:length(population),speakerID),1)}
-#speakerID=1; hearerID=2
-situation=SITUATION(speakerID)
-#situation$target=0; situation$topic=''; situation[grep(1, situation$personA)[1],]$target=1; situation[grep(1, situation$personA)[1],]$topic='actor'
-proposition=PROPOSITION(speakerID, situation)
-(prep=PREPARE(speakerID, proposition, situation))
-(utterance=PRODUCE(speakerID, prep))
-
-#speakerID=sample(length(population), 1); if(length(population)==2){hearerID=setdiff(1:length(population),speakerID)}; if(length(population) > 2){hearerID=sample(setdiff(1:length(population),speakerID),1)}
-analysis=ANALYZE(hearerID, utterance, situation)
-grouping=GROUP(hearerID, analysis)
-(interpretation=INTERPRET(hearerID, utterance, situation))
-(success=SUCCESS(prep, interpretation, situation))
-prep$external$ID; prep$internal$ID
-interpretation$external$ID; interpretation$internal$ID
-
-population[[speakerID]]=FREQUPDATE(speakerID, prep, success)
-population[[hearerID]]=FREQUPDATE(hearerID, interpretation, success)
-ff = EROSION(hearerID, interpretation)
-ff = SEMUPDATE(speakerID)
-ff = SEMUPDATE(hearerID)
-
-ff=population[[speakerID]]$nouns
-head(ff[order(ff$recency),])
-plot(ff$recency, ff$activation)
-
-
-system.time(SITUATION(1)->situation)
-system.time(PROPOSITION(1, situation)->prop)
-system.time(PREPARE(1, prop, situation)->prep)
-system.time(PRODUCE(2, prep)->utterance)
-system.time(INTERPRET(2, utterance, situation)->interpretation)
-
-i=length(population)
-population[[i]]$generation; population[[i]]$age
-population[[i]]$nouns[population[[i]]$nouns$person!=3,]
-head(population[[i]]$nouns[order(population[[i]]$nouns$frequency, decreasing=T),])
-
