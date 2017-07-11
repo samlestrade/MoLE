@@ -44,7 +44,9 @@ function(speakerID, proposition, situation){
 		if(proposition$verb$type=='onePlace'){
 			verbRole='external'
 			person=proposition$external$person
-			semRole='actor'
+			actorScore=VMATCH(proposition$verb[,grep('^Ext', names(proposition$verb))], rep(1, length(distinctions)))
+			undergoerScore=VMATCH(proposition$verb[,grep('^Ext', names(proposition$verb))], rep(0, length(distinctions)))
+			semRole=ifelse(undergoerScore<actorScore, 'actor', 'undergoer')
 			firstArgument=list(person=person, verbRole=verbRole, semRole=semRole, props=proposition$external[,grep('^D\\d', names(proposition$external))])		
 		}
 		if(proposition$verb$type=='twoPlace'){
@@ -154,6 +156,7 @@ function(speakerID, proposition, situation){
 						done=TRUE
 			}	}	}
 			if(done==FALSE){
+				markers=markers[markers$person==3,]
 				markers=speaker$nouns[sample(nrow(speaker$nouns)), ]
 				if(firstArgument$verbRole=='internal'){
 					markers$match=VMATCH(proposition$verb[,grep('^Int\\d',names(proposition$verb))], markers[,grep('^D\\d',names(markers))])
@@ -161,9 +164,12 @@ function(speakerID, proposition, situation){
 				}
 				if(firstArgument$verbRole=='external'){
 					markers$match=VMATCH(proposition$verb[,grep('^Ext\\d',names(proposition$verb))], markers[,grep('^D\\d',names(markers))])
-					markers$distractorMatch=VMATCH(proposition$verb[,grep('^Int\\d',names(proposition$verb))], markers[,grep('^D\\d',names(markers))])		
-				}
-				markers=markers[markers$person==3,]
+					if(proposition$verb$type=='onePlace'){					
+						markers$distractorMatch=.5
+					}
+					if(proposition$verb$type=='twoPlace'){					
+						markers$distractorMatch=VMATCH(proposition$verb[,grep('^Int\\d',names(proposition$verb))], markers[,grep('^D\\d',names(markers))])		
+				}	}
 				markers=markers[order(CANDIDATESCORE(markers, type='nounMarker'), decreasing=TRUE),]
 				markerID=0
 				for (i in 1:nrow(markers)){
