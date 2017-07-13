@@ -89,6 +89,7 @@ function(){
 	flag$person=ifelse(flag$N%in%nouns[nouns$person!=3,]$ID, 'local', 'third')
 	markers=head(sort(tapply(flag$frequency, flag$marker, sum), decreasing=TRUE))
 	markers=data.frame(ID=names(markers), form='', roleScore=0, frequency=markers, netto=0, proportion=0, semWeight=0, local=0, third=0, stringsAsFactors=FALSE)
+	markers=markers[markers$ID%in%nouns$ID,]
 	for(i in 1:nrow(markers)){
 		markers[i,]$form=nouns[nouns$ID==markers$ID[i],]$form
 		markers[i,]$roleScore=rowMeans(nouns[nouns$ID==markers$ID[i],1:5], na.rm=TRUE)
